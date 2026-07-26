@@ -16,7 +16,7 @@ struct BoringHeader: View {
     var body: some View {
         HStack(spacing: 0) {
             HStack {
-                if Defaults[.enableAgentsNotch] || ((!tvm.isEmpty || coordinator.alwaysShowTabs) && Defaults[.boringShelf]) {
+                if Defaults[.enableAgentsNotch] || Defaults[.enableNotificationsNotch] || ((!tvm.isEmpty || coordinator.alwaysShowTabs) && Defaults[.boringShelf]) {
                     TabSelectionView()
                 } else if vm.notchState == .open {
                     EmptyView()

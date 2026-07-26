@@ -288,6 +288,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @MainActor
+    private func openNotificationsPanel() {
+        guard Defaults[.enableNotificationsNotch] else { return }
+
+        closeNotchTask?.cancel()
+        closeNotchTask = nil
+
+        let mouseLocation = NSEvent.mouseLocation
+        var viewModel = vm
+
+        if Defaults[.showOnAllDisplays] {
+            for screen in NSScreen.screens where screen.frame.contains(mouseLocation) {
+                if let uuid = screen.displayUUID, let screenViewModel = viewModels[uuid] {
+                    viewModel = screenViewModel
+                    break
+                }
+            }
+        }
+
+        _ = viewModel.open()
+        withAnimation(.smooth) {
+            coordinator.currentView = .notifications
+        }
+    }
+
+    @MainActor
+    private func presentNotificationBanner() {
+        guard Defaults[.enableNotificationsNotch], Defaults[.notificationBannerInNotch] else { return }
+
+        // Present on the notch under the mouse when spanning displays, else the main notch.
+        let mouseLocation = NSEvent.mouseLocation
+        var viewModel = vm
+        if Defaults[.showOnAllDisplays] {
+            for screen in NSScreen.screens where screen.frame.contains(mouseLocation) {
+                if let uuid = screen.displayUUID, let screenViewModel = viewModels[uuid] {
+                    viewModel = screenViewModel
+                    break
+                }
+            }
+        }
+
+        _ = viewModel.open()
+
+        // Auto-close when the banner window elapses. A user hover cancels this task
+        // (see the hover/open handler), so interacting keeps the notch open. The
+        // banner is cleared by the view model only *after* the notch has closed, so
+        // the collapse animation never reveals the underlying tab (e.g. Now Playing).
+        closeNotchTask?.cancel()
+        let duration = max(2.0, Defaults[.notificationBannerDuration])
+        closeNotchTask = Task { [weak viewModel] in
+            try? await Task.sleep(for: .seconds(duration))
+            await MainActor.run {
+                withAnimation(.smooth) { viewModel?.close() }
+            }
+        }
+    }
+
     private func createBoringNotchWindow(for screen: NSScreen, with viewModel: BoringViewModel) -> NSWindow {
         let rect = NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height)
         let styleMask: NSWindow.StyleMask = [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow]
@@ -396,6 +453,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.openAgentsPanel()
+            }
+        })
+
+        observers.append(NotificationCenter.default.addObserver(
+            forName: Notification.Name.openNotificationsPanel, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.openNotificationsPanel()
+            }
+        })
+
+        observers.append(NotificationCenter.default.addObserver(
+            forName: Notification.Name.presentNotificationBanner, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.presentNotificationBanner()
             }
         })
 

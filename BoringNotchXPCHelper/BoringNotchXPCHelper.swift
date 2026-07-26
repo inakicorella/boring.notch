@@ -20,6 +20,10 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     private var lunarStreamTask: Task<Void, Never>?
     private var lunarListener: BoringNotchXPCHelperLunarListener?
 
+    private let notificationStateQueue = DispatchQueue(label: "BoringNotchXPCHelper.notifications.state")
+    private var notificationWatcher: NotificationWatcher?
+    private var notificationListener: BoringNotchXPCHelperNotificationListener?
+
     init(connection: NSXPCConnection) {
         self.connection = connection
         super.init()
@@ -52,6 +56,14 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
         if let ph = pipeHandlerToClose {
             Task { await ph.close() }
         }
+
+        var watcherToStop: NotificationWatcher?
+        notificationStateQueue.sync {
+            watcherToStop = self.notificationWatcher
+            self.notificationWatcher = nil
+            self.notificationListener = nil
+        }
+        watcherToStop?.stop()
     }
     
     @objc func isAccessibilityAuthorized(with reply: @escaping (Bool) -> Void) {
@@ -344,6 +356,80 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
         )
         lunarStateQueue.async { [weak self] in
             self?.lunarListener?.lunarEventDidUpdate(payload)
+        }
+    }
+
+    // MARK: - System Notifications (Accessibility mirroring)
+
+    @objc func startNotificationStream(with reply: @escaping (Bool) -> Void) {
+        notificationStateQueue.async { [weak self] in
+            guard let self else {
+                reply(false)
+                return
+            }
+
+            if self.notificationWatcher != nil {
+                reply(true)
+                return
+            }
+
+            guard let connection = self.connection else {
+                reply(false)
+                return
+            }
+
+            let listenerProxy = connection.remoteObjectProxyWithErrorHandler { _ in
+                self.stopNotificationStream()
+            } as? BoringNotchXPCHelperNotificationListener
+
+            guard let listenerProxy else {
+                reply(false)
+                return
+            }
+
+            let watcher = NotificationWatcher()
+            watcher.onNotification = { [weak self] observed in
+                self?.emitNotification(observed)
+            }
+
+            let started = watcher.start()
+            guard started else {
+                reply(false)
+                return
+            }
+
+            self.notificationWatcher = watcher
+            self.notificationListener = listenerProxy
+            reply(true)
+        }
+    }
+
+    @objc func stopNotificationStream() {
+        stopNotificationStream(reason: nil)
+    }
+
+    private func stopNotificationStream(reason: String?) {
+        notificationStateQueue.async { [weak self] in
+            guard let self else { return }
+            self.notificationWatcher?.stop()
+            self.notificationWatcher = nil
+            if let reason {
+                self.notificationListener?.notificationStreamDidStop(reason)
+            }
+            self.notificationListener = nil
+        }
+    }
+
+    private func emitNotification(_ observed: ObservedNotification) {
+        let payload = BNNotificationEvent(
+            appName: observed.appName,
+            title: observed.title,
+            subtitle: observed.subtitle,
+            body: observed.body,
+            postedAt: observed.postedAt
+        )
+        notificationStateQueue.async { [weak self] in
+            self?.notificationListener?.notificationDidPost(payload)
         }
     }
 

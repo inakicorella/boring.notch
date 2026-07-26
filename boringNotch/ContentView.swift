@@ -24,6 +24,7 @@ struct ContentView: View {
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
     @ObservedObject var agentsModel = AgentsStateViewModel.shared
+    @ObservedObject var notificationsModel = NotificationsViewModel.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -343,6 +344,17 @@ struct ContentView: View {
                               .onTapGesture {
                                   NotificationCenter.default.post(name: .openAgentsPanel, object: nil)
                               }
+                      } else if Defaults[.enableNotificationsNotch]
+                                    && Defaults[.notificationLiveActivity]
+                                    && notificationsModel.showLiveActivity
+                                    && vm.notchState == .closed
+                                    && !vm.hideOnClosed
+                      {
+                          NotificationsLiveActivity()
+                              .frame(height: displayClosedNotchHeight, alignment: .center)
+                              .onTapGesture {
+                                  NotificationCenter.default.post(name: .openNotificationsPanel, object: nil)
+                              }
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)
@@ -405,17 +417,28 @@ struct ContentView: View {
               .zIndex(1)
             if vm.notchState == .open {
                 VStack {
-                    switch coordinator.currentView {
-                    case .home:
-                        NotchHomeView(
-                            albumArtNamespace: albumArtNamespace,
-                            horizontalMediaGestureFeedback: horizontalMediaGestureFeedback,
-                            isHoveringMusicArea: $isHoveringMusicArea
-                        )
-                    case .shelf:
-                        ShelfView()
-                    case .agents:
-                        AgentsView()
+                    if let banner = notificationsModel.presentingBanner, Defaults[.enableNotificationsNotch] {
+                        NotificationBannerView(notification: banner) {
+                            notificationsModel.dismissBanner()
+                            NotificationCenter.default.post(name: .openNotificationsPanel, object: nil)
+                        }
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .id(banner.id)
+                    } else {
+                        switch coordinator.currentView {
+                        case .home:
+                            NotchHomeView(
+                                albumArtNamespace: albumArtNamespace,
+                                horizontalMediaGestureFeedback: horizontalMediaGestureFeedback,
+                                isHoveringMusicArea: $isHoveringMusicArea
+                            )
+                        case .shelf:
+                            ShelfView()
+                        case .agents:
+                            AgentsView()
+                        case .notifications:
+                            NotificationsView()
+                        }
                     }
                 }
                 .transition(

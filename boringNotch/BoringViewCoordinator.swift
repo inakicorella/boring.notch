@@ -101,6 +101,7 @@ class BoringViewCoordinator: ObservableObject {
     private var osdReplacementCancellable: AnyCancellable?
     private var boringShelfCancellable: AnyCancellable?
     private var enableAgentsCancellable: AnyCancellable?
+    private var enableNotificationsCancellable: AnyCancellable?
     private var osdSourceCancellables: [AnyCancellable] = []
 
     private init() {
@@ -187,6 +188,20 @@ class BoringViewCoordinator: ObservableObject {
                     }
                 }
             }
+        enableNotificationsCancellable = Defaults.publisher(.enableNotificationsNotch)
+            .sink { [weak self] change in
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    if change.newValue {
+                        NotificationsViewModel.shared.startStreamIfNeeded()
+                    } else {
+                        NotificationsViewModel.shared.stopStream()
+                        if self.currentView == .notifications {
+                            self.currentView = .home
+                        }
+                    }
+                }
+            }
 
         Task { @MainActor in
             helloAnimationRunning = firstLaunch
@@ -198,6 +213,10 @@ class BoringViewCoordinator: ObservableObject {
 
             if Defaults[.enableAgentsNotch] {
                 AgentsStateViewModel.shared.startBridgeIfNeeded()
+            }
+
+            if Defaults[.enableNotificationsNotch] {
+                NotificationsViewModel.shared.startStreamIfNeeded()
             }
         }
     }

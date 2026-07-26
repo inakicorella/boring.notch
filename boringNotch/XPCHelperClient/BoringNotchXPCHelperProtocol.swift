@@ -13,6 +13,53 @@ import Foundation
     func lunarStreamDidStop(_ reason: String?)
 }
 
+/// Callback interface for streamed system notifications observed by the helper.
+@objc protocol BoringNotchXPCHelperNotificationListener {
+    func notificationDidPost(_ event: BNNotificationEvent)
+    func notificationStreamDidStop(_ reason: String?)
+}
+
+/// Combined listener interface used as the connection's remoteObjectInterface so
+/// the helper can vend proxies for either callback protocol over one interface.
+@objc protocol BoringNotchXPCHelperListener: BoringNotchXPCHelperLunarListener, BoringNotchXPCHelperNotificationListener {}
+
+@objc(BNNotificationEvent)
+final class BNNotificationEvent: NSObject, NSSecureCoding {
+    static var supportsSecureCoding: Bool { true }
+
+    let appName: String
+    let title: String
+    let subtitle: String
+    let body: String
+    let postedAt: Date
+
+    init(appName: String, title: String, subtitle: String, body: String, postedAt: Date) {
+        self.appName = appName
+        self.title = title
+        self.subtitle = subtitle
+        self.body = body
+        self.postedAt = postedAt
+        super.init()
+    }
+
+    required init?(coder: NSCoder) {
+        appName = coder.decodeObject(of: NSString.self, forKey: "appName") as String? ?? ""
+        title = coder.decodeObject(of: NSString.self, forKey: "title") as String? ?? ""
+        subtitle = coder.decodeObject(of: NSString.self, forKey: "subtitle") as String? ?? ""
+        body = coder.decodeObject(of: NSString.self, forKey: "body") as String? ?? ""
+        postedAt = coder.decodeObject(of: NSDate.self, forKey: "postedAt") as Date? ?? Date()
+        super.init()
+    }
+
+    func encode(with coder: NSCoder) {
+        coder.encode(appName as NSString, forKey: "appName")
+        coder.encode(title as NSString, forKey: "title")
+        coder.encode(subtitle as NSString, forKey: "subtitle")
+        coder.encode(body as NSString, forKey: "body")
+        coder.encode(postedAt as NSDate, forKey: "postedAt")
+    }
+}
+
 @objc(BNLunarBrightnessEvent)
 final class BNLunarBrightnessEvent: NSObject, NSSecureCoding {
     static var supportsSecureCoding: Bool { true }
@@ -59,4 +106,7 @@ final class BNLunarBrightnessEvent: NSObject, NSSecureCoding {
     func stopLunarEventStream()
     /// Write Lunar's hideOSD preference (disable/enable Lunar's OSD when we replace it).
     func setLunarOSDHidden(_ hide: Bool, with reply: @escaping (Bool) -> Void)
+    // System notification mirroring (performed by the helper via Accessibility)
+    func startNotificationStream(with reply: @escaping (Bool) -> Void)
+    func stopNotificationStream()
 }

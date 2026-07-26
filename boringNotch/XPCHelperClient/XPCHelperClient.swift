@@ -13,6 +13,12 @@ final class XPCHelperClient: NSObject {
     private var monitoringTask: Task<Void, Never>?
     private var lunarListener: BoringNotchXPCHelperLunarListener?
     private var hasLunarListener: Bool = false
+
+    // Dedicated connection for the system-notification stream, kept separate from
+    // the Lunar/brightness connection so the two callback paths don't collide.
+    private var notificationConnection: NSXPCConnection?
+    private var notificationRemoteService: RemoteXPCService<BoringNotchXPCHelperProtocol>?
+    private var notificationListener: BoringNotchXPCHelperNotificationListener?
     
     deinit {
         connection?.invalidate()
@@ -363,6 +369,87 @@ final class XPCHelperClient: NSObject {
             }
         } catch {
             return false
+        }
+    }
+
+    // MARK: - System Notification Stream
+
+    private func makeNotificationListenerInterface() -> NSXPCInterface {
+        let interface = NSXPCInterface(with: (any BoringNotchXPCHelperNotificationListener).self)
+        interface.setClasses(
+            NSSet(array: [BNNotificationEvent.self]) as! Set<AnyHashable>,
+            for: #selector(BoringNotchXPCHelperNotificationListener.notificationDidPost(_:)),
+            argumentIndex: 0,
+            ofReply: false
+        )
+        return interface
+    }
+
+    @MainActor
+    private func ensureNotificationService() -> RemoteXPCService<BoringNotchXPCHelperProtocol>? {
+        if let existing = notificationRemoteService { return existing }
+        guard let notificationListener else { return nil }
+
+        let conn = NSXPCConnection(serviceName: serviceName)
+        let listenerInterface = makeNotificationListenerInterface()
+        conn.exportedInterface = listenerInterface
+        conn.exportedObject = notificationListener
+
+        conn.interruptionHandler = { [weak self] in
+            Task { @MainActor in
+                self?.notificationConnection = nil
+                self?.notificationRemoteService = nil
+            }
+        }
+        conn.invalidationHandler = { [weak self] in
+            Task { @MainActor in
+                self?.notificationConnection = nil
+                self?.notificationRemoteService = nil
+            }
+        }
+
+        conn.resume()
+
+        let service = RemoteXPCService<BoringNotchXPCHelperProtocol>(
+            connection: conn,
+            remoteInterface: BoringNotchXPCHelperProtocol.self
+        )
+        notificationConnection = conn
+        notificationRemoteService = service
+        return service
+    }
+
+    nonisolated func startNotificationStream(listener: BoringNotchXPCHelperNotificationListener) async -> Bool {
+        await MainActor.run {
+            notificationListener = listener
+        }
+        do {
+            guard let service = await MainActor.run(body: { ensureNotificationService() }) else {
+                return false
+            }
+            return try await service.withContinuation { service, continuation in
+                service.startNotificationStream { started in
+                    continuation.resume(returning: started)
+                }
+            }
+        } catch {
+            return false
+        }
+    }
+
+    nonisolated func stopNotificationStream() async {
+        do {
+            guard let service = await MainActor.run(body: { notificationRemoteService }) else { return }
+            try await service.withService { service in
+                service.stopNotificationStream()
+            }
+        } catch {
+            return
+        }
+        await MainActor.run {
+            notificationConnection?.invalidate()
+            notificationConnection = nil
+            notificationRemoteService = nil
         }
     }
 }

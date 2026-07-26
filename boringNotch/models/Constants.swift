@@ -116,6 +116,11 @@ extension Notification.Name {
 
     // MARK: - Agents
     static let openAgentsPanel = Notification.Name("com.boringNotch.openAgentsPanel")
+
+    // MARK: - Notifications
+    static let newNotchNotification = Notification.Name("com.boringNotch.newNotchNotification")
+    static let openNotificationsPanel = Notification.Name("com.boringNotch.openNotificationsPanel")
+    static let presentNotificationBanner = Notification.Name("com.boringNotch.presentNotificationBanner")
     
     // MARK: - System
     static let accessibilityAuthorizationChanged = Notification.Name("accessibilityAuthorizationChanged")
@@ -322,6 +327,13 @@ extension Defaults.Keys {
     static let enableAgentsNotch = Key<Bool>("enableAgentsNotch", default: false)
     static let autoOpenAgentsOnPrompt = Key<Bool>("autoOpenAgentsOnPrompt", default: true)
     static let agentsBridgePort = Key<Int>("agentsBridgePort", default: 19642)
+
+    // MARK: Notifications (native notch mirroring)
+    static let enableNotificationsNotch = Key<Bool>("enableNotificationsNotch", default: false)
+    static let notificationLiveActivity = Key<Bool>("notificationLiveActivity", default: true)
+    /// When true, an incoming notification briefly opens the notch to present a banner.
+    static let notificationBannerInNotch = Key<Bool>("notificationBannerInNotch", default: true)
+    static let notificationBannerDuration = Key<Double>("notificationBannerDuration", default: 4.0)
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)

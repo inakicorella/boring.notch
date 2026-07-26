@@ -19,6 +19,7 @@ struct TabSelectionView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @Default(.boringShelf) private var boringShelf
     @Default(.enableAgentsNotch) private var enableAgentsNotch
+    @Default(.enableNotificationsNotch) private var enableNotificationsNotch
     @Namespace var animation
 
     private var visibleTabs: [TabModel] {
@@ -30,6 +31,9 @@ struct TabSelectionView: View {
         }
         if enableAgentsNotch {
             tabs.append(TabModel(label: "Agents", icon: "sparkles", view: .agents))
+        }
+        if enableNotificationsNotch {
+            tabs.append(TabModel(label: "Notifications", icon: "bell.badge", view: .notifications))
         }
         return tabs
     }
