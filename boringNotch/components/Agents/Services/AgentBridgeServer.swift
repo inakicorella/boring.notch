@@ -102,10 +102,15 @@ final class AgentBridgeServer: @unchecked Sendable {
             }
 
             if let request = HTTPRequest.parse(from: next) {
-                Task {
+                let task = Task {
                     let response = await self.route(request)
                     self.send(response, on: connection)
                 }
+                // While the decision is pending, keep watching the socket. If
+                // the client (Claude Code's hook) hangs up before we answer,
+                // cancel the route so the pending prompt is dropped from the
+                // notch immediately instead of lingering until timeout.
+                self.watchForDisconnect(on: connection, cancelling: task)
                 return
             }
 
@@ -149,6 +154,19 @@ final class AgentBridgeServer: @unchecked Sendable {
     private func handleCursorEdit(body: Data) async -> HTTPResponse {
         await AgentsStateViewModel.shared.recordCursorEdit(rawBody: body)
         return HTTPResponse(status: 200, contentType: "application/json", body: Data(#"{"ok":true}"#.utf8))
+    }
+
+    /// Watches an in-flight connection for the client hanging up. Our requests
+    /// are one-shot, so any further read completing means the peer closed the
+    /// socket (FIN -> isComplete) or reset it (error). Either way the client is
+    /// gone, so cancel the routing task; that propagates to the awaiting
+    /// decision and drops the stale prompt from the notch.
+    private func watchForDisconnect(on connection: NWConnection, cancelling task: Task<Void, Never>) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { _, _, isComplete, error in
+            if isComplete || error != nil {
+                task.cancel()
+            }
+        }
     }
 
     private func send(_ response: HTTPResponse, on connection: NWConnection) {
