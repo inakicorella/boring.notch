@@ -100,6 +100,7 @@ class BoringViewCoordinator: ObservableObject {
     private var accessibilityObserver: Any?
     private var osdReplacementCancellable: AnyCancellable?
     private var boringShelfCancellable: AnyCancellable?
+    private var enableAgentsCancellable: AnyCancellable?
     private var osdSourceCancellables: [AnyCancellable] = []
 
     private init() {
@@ -172,6 +173,20 @@ class BoringViewCoordinator: ObservableObject {
                     }
                 }
             }
+        enableAgentsCancellable = Defaults.publisher(.enableAgentsNotch)
+            .sink { [weak self] change in
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    if change.newValue {
+                        AgentsStateViewModel.shared.startBridgeIfNeeded()
+                    } else {
+                        AgentsStateViewModel.shared.stopBridge()
+                        if self.currentView == .agents {
+                            self.currentView = .home
+                        }
+                    }
+                }
+            }
 
         Task { @MainActor in
             helloAnimationRunning = firstLaunch
@@ -180,6 +195,10 @@ class BoringViewCoordinator: ObservableObject {
                 await MediaKeyInterceptor.shared.start(promptIfNeeded: false)
             }
             self.applyOSDSources()
+
+            if Defaults[.enableAgentsNotch] {
+                AgentsStateViewModel.shared.startBridgeIfNeeded()
+            }
         }
     }
     

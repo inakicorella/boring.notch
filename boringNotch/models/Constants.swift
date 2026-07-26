@@ -113,6 +113,9 @@ extension Notification.Name {
     
     // MARK: - Shelf
     static let expandedDragDetectionChanged = Notification.Name("expandedDragDetectionChanged")
+
+    // MARK: - Agents
+    static let openAgentsPanel = Notification.Name("com.boringNotch.openAgentsPanel")
     
     // MARK: - System
     static let accessibilityAuthorizationChanged = Notification.Name("accessibilityAuthorizationChanged")
@@ -314,6 +317,11 @@ extension Defaults.Keys {
     static let autoRemoveShelfItems = Key<Bool>("autoRemoveShelfItems", default: false)
     static let expandedDragDetection = Key<Bool>("expandedDragDetection", default: true)
     static let reverseShelfOrdering = Key<Bool>("reverseShelfOrdering", default: false)
+
+    // MARK: Agents (Cursor + Claude Code)
+    static let enableAgentsNotch = Key<Bool>("enableAgentsNotch", default: false)
+    static let autoOpenAgentsOnPrompt = Key<Bool>("autoOpenAgentsOnPrompt", default: true)
+    static let agentsBridgePort = Key<Int>("agentsBridgePort", default: 19642)
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)

@@ -23,6 +23,7 @@ struct ContentView: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
+    @ObservedObject var agentsModel = AgentsStateViewModel.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -332,6 +333,16 @@ struct ContentView: View {
                               gestureProgress: $gestureProgress
                           )
                               .transition(.opacity)
+                      } else if Defaults[.enableAgentsNotch]
+                                    && agentsModel.hasPendingPrompts
+                                    && vm.notchState == .closed
+                                    && !vm.hideOnClosed
+                      {
+                          AgentsLiveActivity()
+                              .frame(height: displayClosedNotchHeight, alignment: .center)
+                              .onTapGesture {
+                                  NotificationCenter.default.post(name: .openAgentsPanel, object: nil)
+                              }
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)
@@ -403,6 +414,8 @@ struct ContentView: View {
                         )
                     case .shelf:
                         ShelfView()
+                    case .agents:
+                        AgentsView()
                     }
                 }
                 .transition(

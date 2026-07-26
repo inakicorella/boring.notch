@@ -263,6 +263,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @MainActor
+    private func openAgentsPanel() {
+        guard Defaults[.enableAgentsNotch] else { return }
+
+        closeNotchTask?.cancel()
+        closeNotchTask = nil
+
+        let mouseLocation = NSEvent.mouseLocation
+        var viewModel = vm
+
+        if Defaults[.showOnAllDisplays] {
+            for screen in NSScreen.screens where screen.frame.contains(mouseLocation) {
+                if let uuid = screen.displayUUID, let screenViewModel = viewModels[uuid] {
+                    viewModel = screenViewModel
+                    break
+                }
+            }
+        }
+
+        _ = viewModel.open()
+        withAnimation(.smooth) {
+            coordinator.currentView = .agents
+        }
+    }
+
     private func createBoringNotchWindow(for screen: NSScreen, with viewModel: BoringViewModel) -> NSWindow {
         let rect = NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height)
         let styleMask: NSWindow.StyleMask = [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow]
@@ -363,6 +388,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.setupDragDetectors()
+            }
+        })
+
+        observers.append(NotificationCenter.default.addObserver(
+            forName: Notification.Name.openAgentsPanel, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.openAgentsPanel()
             }
         })
 
