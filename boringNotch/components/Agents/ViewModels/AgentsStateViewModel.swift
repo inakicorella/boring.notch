@@ -57,23 +57,34 @@ final class AgentsStateViewModel: ObservableObject {
         let payload = (try? JSONDecoder().decode(ClaudePermissionPayload.self, from: rawBody))
             ?? ClaudePermissionPayload(toolName: nil, hookEventName: nil, toolInput: nil, sessionId: nil)
 
-        let decision = await withCheckedContinuation { (continuation: CheckedContinuation<AgentDecision, Never>) in
-            let prompt = PendingClaudePrompt(payload: payload, rawBody: rawBody, continuation: continuation)
-            pendingPrompts.insert(prompt, at: 0)
+        let promptID = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<AgentDecision, Never>) in
+                let prompt = PendingClaudePrompt(id: promptID, payload: payload, rawBody: rawBody, continuation: continuation)
+                pendingPrompts.insert(prompt, at: 0)
 
-            if Defaults[.autoOpenAgentsOnPrompt] {
-                NotificationCenter.default.post(name: .openAgentsPanel, object: nil)
-            }
+                if Defaults[.autoOpenAgentsOnPrompt] {
+                    NotificationCenter.default.post(name: .openAgentsPanel, object: nil)
+                }
 
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(self?.decisionTimeout ?? 120))
-                guard let self else { return }
-                if let stillPending = self.pendingPrompts.first(where: { $0.id == prompt.id }), !stillPending.isResolved {
-                    self.resolve(promptID: prompt.id, decision: .deny)
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(self?.decisionTimeout ?? 120))
+                    guard let self else { return }
+                    if let stillPending = self.pendingPrompts.first(where: { $0.id == promptID }), !stillPending.isResolved {
+                        self.resolve(promptID: promptID, decision: .deny)
+                    }
                 }
             }
+        } onCancel: {
+            // Claude Code hung up before a decision (session ended, request
+            // withdrawn, or the hook process was killed). Drop the stale prompt
+            // so it disappears from the notch instead of lingering as fake
+            // "approval history" until the timeout. resolve() is idempotent and
+            // resumes the continuation exactly once.
+            Task { @MainActor [weak self] in
+                self?.resolve(promptID: promptID, decision: .deny)
+            }
         }
-        return decision
     }
 
     func resolve(promptID: UUID, decision: AgentDecision) {
