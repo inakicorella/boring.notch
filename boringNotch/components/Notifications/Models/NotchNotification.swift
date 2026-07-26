@@ -43,21 +43,42 @@ struct NotchNotification: Identifiable, Equatable {
             .joined(separator: " — ")
     }
 
-    /// Best-effort icon for the source app, resolved from its name. Falls back to
-    /// a matching running app, then a Spotlight/bundle lookup, else nil.
+    /// The source app's real icon (the one the native banner shows), resolved from
+    /// its name. nil only when the app can't be located, so the UI shows a fallback.
     var appIcon: NSImage? {
-        guard !appName.isEmpty else { return nil }
-        let workspace = NSWorkspace.shared
-        if let running = workspace.runningApplications.first(where: {
-            $0.localizedName == appName
-        })?.icon {
-            return running
+        AppIconResolver.icon(forAppNamed: appName)
+    }
+}
+
+/// Resolves app icons by display name and caches results (including misses), so
+/// the per-render `appIcon` lookup doesn't rescan running apps and disk each time.
+enum AppIconResolver {
+    private static var cache: [String: NSImage] = [:]
+    private static var misses: Set<String> = []
+    private static let lock = NSLock()
+
+    static func icon(forAppNamed name: String) -> NSImage? {
+        guard !name.isEmpty else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        if let hit = cache[name] { return hit }
+        if misses.contains(name) { return nil }
+
+        var resolved: NSImage?
+        if let running = NSWorkspace.shared.runningApplications
+            .first(where: { $0.localizedName == name })?.icon {
+            resolved = running
+        } else if let path = NSWorkspace.shared.fullPath(forApplication: name) {
+            // Deprecated but the only name→bundle lookup that works without a bundle
+            // id, and it resolves apps that aren't currently running.
+            resolved = NSWorkspace.shared.icon(forFile: path)
         }
-        if let url = NSWorkspace.shared.urlForApplication(
-            withBundleIdentifier: "com.apple.\(appName.replacingOccurrences(of: " ", with: ""))"
-        ) {
-            return workspace.icon(forFile: url.path)
+
+        if let resolved {
+            cache[name] = resolved
+        } else {
+            misses.insert(name)
         }
-        return nil
+        return resolved
     }
 }
