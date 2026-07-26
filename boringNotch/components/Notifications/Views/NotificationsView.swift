@@ -8,6 +8,14 @@ import SwiftUI
 
 struct NotificationsView: View {
     @StateObject private var model = NotificationsViewModel.shared
+    @Default(.enableNotificationsNotch) private var enableNotificationsNotch
+
+    /// The stream can only run once the helper is Accessibility-trusted, so a
+    /// stopped stream while the feature is on means the grant is missing.
+    private var emptyStateText: LocalizedStringKey {
+        guard enableNotificationsNotch else { return "Notification mirroring is off" }
+        return model.streamRunning ? "No recent notifications" : "Accessibility permission needed"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -27,7 +35,7 @@ struct NotificationsView: View {
             }
 
             if model.notifications.isEmpty {
-                Text(model.streamRunning ? "No recent notifications" : "Notification mirroring is off")
+                Text(emptyStateText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)

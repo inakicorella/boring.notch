@@ -333,7 +333,10 @@ extension Defaults.Keys {
     static let notificationLiveActivity = Key<Bool>("notificationLiveActivity", default: true)
     /// When true, an incoming notification briefly opens the notch to present a banner.
     static let notificationBannerInNotch = Key<Bool>("notificationBannerInNotch", default: true)
-    static let notificationBannerDuration = Key<Double>("notificationBannerDuration", default: 4.0)
+    static let notificationBannerDuration = Key<Double>("notificationBannerDuration", default: 5.0)
+    /// When true, dismiss the native banner right after it is mirrored into the notch
+    /// (single-surface mode). Only ever suppresses notifications that were captured.
+    static let suppressNativeNotifications = Key<Bool>("suppressNativeNotifications", default: false)
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)

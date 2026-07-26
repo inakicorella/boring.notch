@@ -51,6 +51,10 @@ final class NotificationWatcher {
     /// Called for every newly observed notification (on the watcher's queue).
     var onNotification: ((ObservedNotification) -> Void)?
 
+    /// When true, dismiss each native banner right after it has been mirrored, so
+    /// the notch is the single surface. Only ever dismisses banners we captured.
+    var suppressNativeBanners = false
+
     /// Returns false if Accessibility isn't trusted or Notification Center isn't found.
     @discardableResult
     func start() -> Bool {
@@ -136,6 +140,11 @@ final class NotificationWatcher {
                 }
                 seen[observed.signature] = now
                 onNotification?(observed)
+                // Only after a successful capture+emit do we dismiss the native
+                // banner — so if mirroring is ever down, native banners are untouched.
+                if suppressNativeBanners {
+                    dismissNativeBanner(group)
+                }
             }
         }
     }
@@ -222,5 +231,17 @@ final class NotificationWatcher {
 
     private func str(_ el: AXUIElement, _ attr: String) -> String? {
         copyAttr(el, attr) as? String
+    }
+
+    /// Dismiss a native banner by performing only its "Close" action. We never
+    /// perform AXPress/Show — those *open* the notification and activate its app.
+    private func dismissNativeBanner(_ banner: AXUIElement) {
+        var names: CFArray?
+        guard AXUIElementCopyActionNames(banner, &names) == .success,
+              let actions = names as? [String] else { return }
+        // Notification Center exposes custom actions like "Name:Close\nTarget:…".
+        if let closeAction = actions.first(where: { $0.hasPrefix("Name:Close") }) {
+            AXUIElementPerformAction(banner, closeAction as CFString)
+        }
     }
 }

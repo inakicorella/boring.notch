@@ -452,5 +452,16 @@ final class XPCHelperClient: NSObject {
             notificationRemoteService = nil
         }
     }
+
+    nonisolated func setSuppressNativeNotifications(_ enabled: Bool) async {
+        do {
+            guard let service = await MainActor.run(body: { notificationRemoteService }) else { return }
+            try await service.withService { service in
+                service.setSuppressNativeNotifications(enabled)
+            }
+        } catch {
+            return
+        }
+    }
 }
 

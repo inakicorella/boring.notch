@@ -40,8 +40,12 @@ final class NotificationsViewModel: ObservableObject {
         guard listener == nil else { return }
         let listener = NotificationEventListener(viewModel: self)
         self.listener = listener
+        let suppress = Defaults[.suppressNativeNotifications]
         Task {
             let started = await XPCHelperClient.shared.startNotificationStream(listener: listener)
+            if started {
+                await XPCHelperClient.shared.setSuppressNativeNotifications(suppress)
+            }
             await MainActor.run {
                 self.streamRunning = started
                 if !started {
@@ -49,6 +53,14 @@ final class NotificationsViewModel: ObservableObject {
                     self.listener = nil
                 }
             }
+        }
+    }
+
+    /// Push the current single-surface preference to the helper (call on toggle).
+    func applySuppressNativeNotifications() {
+        let suppress = Defaults[.suppressNativeNotifications]
+        Task {
+            await XPCHelperClient.shared.setSuppressNativeNotifications(suppress)
         }
     }
 

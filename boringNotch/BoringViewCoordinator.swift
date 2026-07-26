@@ -130,10 +130,20 @@ class BoringViewCoordinator: ObservableObject {
             forName: Notification.Name.accessibilityAuthorizationChanged,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { note in
+            let granted = note.userInfo?["granted"] as? Bool ?? false
             Task { @MainActor in
                 if Defaults[.osdReplacement] {
                     await MediaKeyInterceptor.shared.start(promptIfNeeded: false)
+                }
+                // The helper can only read notification banners once Accessibility is
+                // trusted, so pick up a grant that lands after launch / feature-toggle.
+                if Defaults[.enableNotificationsNotch] {
+                    if granted {
+                        NotificationsViewModel.shared.startStreamIfNeeded()
+                    } else {
+                        NotificationsViewModel.shared.stopStream()
+                    }
                 }
             }
         }

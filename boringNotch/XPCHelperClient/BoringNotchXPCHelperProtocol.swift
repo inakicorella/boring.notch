@@ -109,4 +109,6 @@ final class BNLunarBrightnessEvent: NSObject, NSSecureCoding {
     // System notification mirroring (performed by the helper via Accessibility)
     func startNotificationStream(with reply: @escaping (Bool) -> Void)
     func stopNotificationStream()
+    /// Dismiss native banners after they are mirrored (single-surface mode).
+    func setSuppressNativeNotifications(_ enabled: Bool)
 }
