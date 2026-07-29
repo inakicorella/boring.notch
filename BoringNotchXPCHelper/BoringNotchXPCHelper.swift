@@ -23,7 +23,6 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     private let notificationStateQueue = DispatchQueue(label: "BoringNotchXPCHelper.notifications.state")
     private var notificationWatcher: NotificationWatcher?
     private var notificationListener: BoringNotchXPCHelperNotificationListener?
-    private var suppressNativeNotifications = false
 
     init(connection: NSXPCConnection) {
         self.connection = connection
@@ -392,8 +391,6 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
             watcher.onNotification = { [weak self] observed in
                 self?.emitNotification(observed)
             }
-            watcher.suppressNativeBanners = self.suppressNativeNotifications
-
             let started = watcher.start()
             guard started else {
                 reply(false)
@@ -408,14 +405,6 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
 
     @objc func stopNotificationStream() {
         stopNotificationStream(reason: nil)
-    }
-
-    @objc func setSuppressNativeNotifications(_ enabled: Bool) {
-        notificationStateQueue.async { [weak self] in
-            guard let self else { return }
-            self.suppressNativeNotifications = enabled
-            self.notificationWatcher?.suppressNativeBanners = enabled
-        }
     }
 
     private func stopNotificationStream(reason: String?) {

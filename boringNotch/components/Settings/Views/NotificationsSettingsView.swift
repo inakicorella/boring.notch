@@ -10,7 +10,6 @@ struct NotificationsSettings: View {
     @Default(.enableNotificationsNotch) private var enableNotificationsNotch
     @Default(.notificationLiveActivity) private var notificationLiveActivity
     @Default(.notificationBannerInNotch) private var notificationBannerInNotch
-    @Default(.suppressNativeNotifications) private var suppressNativeNotifications
     @StateObject private var model = NotificationsViewModel.shared
     @State private var accessibilityGranted: Bool?
 
@@ -38,18 +37,10 @@ struct NotificationsSettings: View {
                     Text("Otherwise, peek on the closed notch")
                 }
                 .disabled(!enableNotificationsNotch || notificationBannerInNotch)
-
-                Defaults.Toggle(key: .suppressNativeNotifications) {
-                    Text("Hide the macOS banner once mirrored")
-                }
-                .disabled(!enableNotificationsNotch)
-                .onChange(of: suppressNativeNotifications) { _, _ in
-                    model.applySuppressNativeNotifications()
-                }
             } header: {
                 Text("General")
             } footer: {
-                Text("Notifications are read from macOS Notification Center as their banners appear. Ones fully suppressed by a Focus mode won't be captured. \"Hide the macOS banner\" only dismisses notifications that were successfully mirrored, so nothing is lost if mirroring is off.")
+                Text("Notifications are read from macOS Notification Center as their banners appear, and are mirrored alongside the normal macOS banner rather than replacing it. Ones fully suppressed by a Focus mode won't be captured.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
