@@ -342,8 +342,14 @@ struct ContentView: View {
                                     && vm.notchState == .closed
                                     && !vm.hideOnClosed
                       {
-                          AgentsLiveActivity()
-                              .frame(height: displayClosedNotchHeight, alignment: .center)
+                          ClosedNotchWings(notchWidth: vm.closedNotchSize.width, height: displayClosedNotchHeight) {
+                              Image(systemName: "sparkles")
+                                  .foregroundStyle(.orange)
+                          } trailing: {
+                              Text("\(agentsModel.pendingPromptCount)")
+                                  .font(.system(size: 13, weight: .bold, design: .rounded))
+                                  .foregroundStyle(.orange)
+                          }
                               .onTapGesture {
                                   NotificationCenter.default.post(name: .openAgentsPanel, object: nil)
                               }
@@ -353,8 +359,14 @@ struct ContentView: View {
                                     && vm.notchState == .closed
                                     && !vm.hideOnClosed
                       {
-                          NotificationsLiveActivity()
-                              .frame(height: displayClosedNotchHeight, alignment: .center)
+                          ClosedNotchWings(notchWidth: vm.closedNotchSize.width, height: displayClosedNotchHeight) {
+                              if let latest = notificationsModel.latest {
+                                  NotificationAppIcon(notification: latest)
+                              }
+                          } trailing: {
+                              Image(systemName: "bell.fill")
+                                  .foregroundStyle(.white)
+                          }
                               .onTapGesture {
                                   NotificationCenter.default.post(name: .openNotificationsPanel, object: nil)
                               }
@@ -833,4 +845,25 @@ struct GeneralDropTargetDelegate: DropDelegate {
     return ContentView()
         .environmentObject(vm)
         .frame(width: vm.notchSize.width, height: vm.notchSize.height)
+}
+
+/// Closed-notch live activity: one square either side of the physical notch,
+/// which hides anything drawn over it. Same geometry as `MusicLiveActivity`.
+struct ClosedNotchWings<Leading: View, Trailing: View>: View {
+    let notchWidth: CGFloat
+    let height: CGFloat
+    @ViewBuilder let leading: Leading
+    @ViewBuilder let trailing: Trailing
+
+    var body: some View {
+        let wing = max(0, height - 12)
+        HStack(spacing: 0) {
+            leading.frame(width: wing, height: wing)
+            Rectangle()
+                .fill(.black)
+                .frame(width: notchWidth - 4 + 2 * liveActivityEdgeMargin)
+            trailing.frame(width: wing, height: wing)
+        }
+        .frame(height: height)
+    }
 }

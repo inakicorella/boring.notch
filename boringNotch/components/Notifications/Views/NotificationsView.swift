@@ -35,10 +35,7 @@ struct NotificationsView: View {
             }
 
             if model.notifications.isEmpty {
-                Text(emptyStateText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                NotchEmptyState(icon: model.streamRunning ? "bell" : "bell.slash", text: emptyStateText)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
@@ -46,6 +43,7 @@ struct NotificationsView: View {
                             NotificationRow(notification: notification) {
                                 model.dismiss(notification.id)
                             }
+                            .onTapGesture { model.openSourceApp(of: notification) }
                         }
                     }
                 }
@@ -60,9 +58,12 @@ struct NotificationsView: View {
 private struct NotificationRow: View {
     let notification: NotchNotification
     let onDismiss: () -> Void
+    @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
+            NotificationAppIcon(notification: notification)
+                .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     if !notification.appName.isEmpty {
@@ -89,8 +90,14 @@ private struct NotificationRow: View {
             HoverButton(icon: "xmark", iconColor: .secondary, scale: .medium) {
                 onDismiss()
             }
+            .opacity(isHovering ? 1 : 0)
+            .accessibilityLabel("Dismiss")
         }
         .padding(8)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.2)) { isHovering = hovering }
+        }
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.white.opacity(0.06))
@@ -105,7 +112,7 @@ struct NotificationBannerView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            appIcon
+            NotificationAppIcon(notification: notification)
                 .frame(width: 42, height: 42)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -138,48 +145,46 @@ struct NotificationBannerView: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
     }
+}
 
-    @ViewBuilder
-    private var appIcon: some View {
+/// The source app's icon, or a bell when the app can't be resolved.
+struct NotificationAppIcon: View {
+    let notification: NotchNotification
+
+    var body: some View {
         if let icon = notification.appIcon {
             Image(nsImage: icon)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
         } else {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color.white.opacity(0.10))
                 Image(systemName: "bell.fill")
-                    .font(.system(size: 18))
+                    .font(.system(size: 12))
                     .foregroundStyle(.white)
             }
         }
     }
 }
 
-/// Compact closed-notch indicator for the most recent notification.
-struct NotificationsLiveActivity: View {
-    @StateObject private var model = NotificationsViewModel.shared
+/// Empty-panel message in the shelf's style (hierarchical symbol + rounded gray text).
+struct NotchEmptyState: View {
+    let icon: String
+    let text: LocalizedStringKey
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bell.fill")
-                .foregroundStyle(.white)
-            if let latest = model.latest {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(latest.headline)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    if !latest.appName.isEmpty {
-                        Text(latest.appName)
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-            }
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .symbolVariant(.fill)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.white, .gray)
+                .imageScale(.large)
+            Text(text)
+                .font(.system(.callout, design: .rounded).weight(.medium))
+                .foregroundStyle(.gray)
+                .multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

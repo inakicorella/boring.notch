@@ -468,6 +468,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
         }
 
+        KeyboardShortcuts.onKeyDown(for: .showAgents) {
+            NotificationCenter.default.post(name: .openAgentsPanel, object: nil)
+        }
+        KeyboardShortcuts.onKeyDown(for: .allowAgentRequest) {
+            Task { @MainActor in AgentsStateViewModel.shared.resolveNewest(.allow) }
+        }
+        KeyboardShortcuts.onKeyDown(for: .denyAgentRequest) {
+            Task { @MainActor in AgentsStateViewModel.shared.resolveNewest(.deny) }
+        }
+
         agentsCancellable = AgentsStateViewModel.shared.$pendingPrompts
             .map(\.isEmpty)
             .removeDuplicates()

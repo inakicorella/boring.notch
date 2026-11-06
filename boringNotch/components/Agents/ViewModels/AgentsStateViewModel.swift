@@ -54,7 +54,7 @@ final class AgentsStateViewModel: ObservableObject {
 
     func awaitClaudeDecision(rawBody: Data) async -> AgentDecision {
         let payload = (try? JSONDecoder().decode(ClaudePermissionPayload.self, from: rawBody))
-            ?? ClaudePermissionPayload(toolName: nil, hookEventName: nil, toolInput: nil, sessionId: nil)
+            ?? ClaudePermissionPayload(toolName: nil, hookEventName: nil, toolInput: nil, sessionId: nil, cwd: nil)
 
         let promptID = UUID()
         return await withTaskCancellationHandler {
@@ -90,6 +90,12 @@ final class AgentsStateViewModel: ObservableObject {
         guard let index = pendingPrompts.firstIndex(where: { $0.id == promptID }) else { return }
         let prompt = pendingPrompts.remove(at: index)
         prompt.resolve(decision)
+    }
+
+    /// Answers the newest request (the one shown first in the panel).
+    func resolveNewest(_ decision: AgentDecision) {
+        guard let newest = pendingPrompts.first else { return }
+        resolve(promptID: newest.id, decision: decision)
     }
 
     func recordCursorEdit(rawBody: Data) {

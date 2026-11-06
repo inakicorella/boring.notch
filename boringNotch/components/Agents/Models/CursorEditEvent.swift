@@ -21,6 +21,6 @@ struct CursorEditEvent: Identifiable, Equatable, Codable {
     }
 
     var directoryHint: String {
-        URL(fileURLWithPath: filePath).deletingLastPathComponent().path
+        abbreviatingHome(URL(fileURLWithPath: filePath).deletingLastPathComponent().path)
     }
 }

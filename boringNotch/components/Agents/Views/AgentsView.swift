@@ -9,6 +9,7 @@ import SwiftUI
 struct AgentsView: View {
     @EnvironmentObject var vm: BoringViewModel
     @StateObject private var agents = AgentsStateViewModel.shared
+    private let headerHeight: CGFloat = 22
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -36,12 +37,10 @@ struct AgentsView: View {
                         .foregroundStyle(.black)
                 }
             }
+            .frame(height: headerHeight)
 
             if agents.pendingPrompts.isEmpty {
-                Text("No pending approvals")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                NotchEmptyState(icon: "checkmark.shield", text: "No pending approvals")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
@@ -80,13 +79,13 @@ struct AgentsView: View {
                 HoverButton(icon: "arrow.up.forward.app", iconColor: .white, scale: .medium) {
                     agents.openInCursor()
                 }
+                .help("Open Cursor")
             }
+            // HoverButton is 30pt tall; pin both headers so the panels' titles line up.
+            .frame(height: headerHeight)
 
             if agents.cursorEdits.isEmpty {
-                Text("No recent agent edits")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                NotchEmptyState(icon: "doc.text", text: "No recent agent edits")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
@@ -115,28 +114,47 @@ private struct ClaudePromptRow: View {
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(prompt.payload.displayTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(prompt.payload.displayTitle)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                    if let project = prompt.payload.projectName {
+                        Text(project)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .lineLimit(1)
                 Text(prompt.payload.displayDetail)
-                    .font(.caption2)
+                    .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                    .truncationMode(.middle)
             }
             Spacer(minLength: 4)
-            HoverButton(icon: "xmark", iconColor: .red.opacity(0.9), scale: .medium) {
-                onDecide(.deny)
-            }
-            HoverButton(icon: "checkmark", iconColor: .green, scale: .medium) {
-                onDecide(.allow)
-            }
+            decisionButton(.deny)
+            decisionButton(.allow)
         }
         .padding(8)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.black.opacity(0.35))
         )
+    }
+
+    private func decisionButton(_ decision: AgentDecision) -> some View {
+        let allow = decision == .allow
+        return Button { onDecide(decision) } label: {
+            Image(systemName: allow ? "checkmark" : "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(allow ? .black : .white)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(allow ? Color.green : Color.white.opacity(0.15)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(allow ? "Allow" : "Deny")
+        .accessibilityLabel(allow ? "Allow" : "Deny")
     }
 }
 
@@ -158,6 +176,7 @@ private struct CursorEditRow: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.head)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "arrow.up.forward")
@@ -171,22 +190,5 @@ private struct CursorEditRow: View {
             )
         }
         .buttonStyle(.plain)
-    }
-}
-
-/// Compact closed-notch indicator for pending Claude approvals.
-struct AgentsLiveActivity: View {
-    @StateObject private var agents = AgentsStateViewModel.shared
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "sparkles")
-                .foregroundStyle(.orange)
-            Text(agents.pendingPromptCount == 1 ? "1 agent approval" : "\(agents.pendingPromptCount) agent approvals")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 10)
     }
 }

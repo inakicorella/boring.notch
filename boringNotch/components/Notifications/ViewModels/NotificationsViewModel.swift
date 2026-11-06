@@ -71,6 +71,17 @@ final class NotificationsViewModel: ObservableObject {
         notifications.removeAll { $0.id == id }
     }
 
+    /// Brings the notification's app forward. Best effort: matched by display name,
+    /// so it does nothing for apps it can't find (e.g. iPhone-forwarded ones).
+    func openSourceApp(of notification: NotchNotification) {
+        let workspace = NSWorkspace.shared
+        if let app = workspace.runningApplications.first(where: { $0.localizedName == notification.appName }) {
+            app.activate()
+        } else if !notification.appName.isEmpty, let path = workspace.fullPath(forApplication: notification.appName) {
+            workspace.openApplication(at: URL(fileURLWithPath: path), configuration: .init())
+        }
+    }
+
     // MARK: - Ingestion (called from the XPC listener, hopped to main)
 
     fileprivate func ingest(_ event: BNNotificationEvent) {

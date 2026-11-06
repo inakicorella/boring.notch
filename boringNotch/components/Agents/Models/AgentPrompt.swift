@@ -15,8 +15,10 @@ struct ClaudePermissionPayload: Codable {
     let hookEventName: String?
     let toolInput: [String: AnyCodableValue]?
     let sessionId: String?
+    let cwd: String?
 
     enum CodingKeys: String, CodingKey {
+        case cwd
         case toolName = "tool_name"
         case hookEventName = "hook_event_name"
         case toolInput = "tool_input"
@@ -27,13 +29,18 @@ struct ClaudePermissionPayload: Codable {
         toolName ?? "Permission request"
     }
 
+    /// Folder Claude Code is running in, to tell parallel sessions apart.
+    var projectName: String? {
+        cwd.map { URL(fileURLWithPath: $0).lastPathComponent }
+    }
+
     var displayDetail: String {
         guard let toolInput else { return "Claude Code is waiting for approval" }
         if let filePath = toolInput["file_path"]?.stringValue {
-            return filePath
+            return abbreviatingHome(filePath)
         }
         if let path = toolInput["path"]?.stringValue {
-            return path
+            return abbreviatingHome(path)
         }
         if let command = toolInput["command"]?.stringValue {
             return command
@@ -43,6 +50,14 @@ struct ClaudePermissionPayload: Codable {
         }
         return "Claude Code is waiting for approval"
     }
+}
+
+/// The user's real home folder; in the sandbox `NSHomeDirectory()` is the app container.
+private let realHomePath = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? NSHomeDirectory()
+
+/// "/Users/me/x" → "~/x", for compact path display.
+func abbreviatingHome(_ path: String) -> String {
+    path.hasPrefix(realHomePath + "/") ? "~" + path.dropFirst(realHomePath.count) : path
 }
 
 /// Minimal AnyCodable for loosely-typed Claude hook payloads.

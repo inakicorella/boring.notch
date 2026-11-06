@@ -26,6 +26,18 @@ struct Shortcuts: View {
             Section {
                 KeyboardShortcuts.Recorder("Toggle Notch Open:", name: .toggleNotchOpen)
             }
+            Section {
+                KeyboardShortcuts.Recorder("Show Agents:", name: .showAgents)
+                KeyboardShortcuts.Recorder("Allow newest request:", name: .allowAgentRequest)
+                KeyboardShortcuts.Recorder("Deny newest request:", name: .denyAgentRequest)
+            } header: {
+                Text("Agents")
+            } footer: {
+                Text("Answers the Claude Code request shown at the top of the Agents panel.")
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
         }
         .accentColor(.effectiveAccent)
         .navigationTitle("Shortcuts")
