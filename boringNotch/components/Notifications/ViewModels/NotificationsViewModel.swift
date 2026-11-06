@@ -28,7 +28,6 @@ final class NotificationsViewModel: ObservableObject {
 
     var latest: NotchNotification? { notifications.first }
     var hasNotifications: Bool { !notifications.isEmpty }
-    var unreadCount: Int { notifications.count }
 
     private init() {}
 
@@ -86,7 +85,6 @@ final class NotificationsViewModel: ObservableObject {
         if notifications.count > maxNotifications {
             notifications = Array(notifications.prefix(maxNotifications))
         }
-        NotificationCenter.default.post(name: .newNotchNotification, object: nil)
 
         // Preferred presentation: briefly open the notch to show a banner.
         if Defaults[.notificationBannerInNotch] {

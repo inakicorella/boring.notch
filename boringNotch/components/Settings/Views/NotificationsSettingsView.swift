@@ -19,12 +19,10 @@ struct NotificationsSettings: View {
                 Defaults.Toggle(key: .enableNotificationsNotch) {
                     Text("Mirror notifications in the notch")
                 }
+                // Starting/stopping the stream is handled by BoringViewCoordinator.
                 .onChange(of: enableNotificationsNotch) { _, enabled in
                     if enabled {
-                        model.startStreamIfNeeded()
                         Task { await refreshAccessibility(prompt: true) }
-                    } else {
-                        model.stopStream()
                     }
                 }
 

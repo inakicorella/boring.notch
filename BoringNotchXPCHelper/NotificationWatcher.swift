@@ -8,9 +8,9 @@
 //
 //  The banner hierarchy on recent macOS is:
 //    AXWindow "Notification Center"
-//      └─ AXGroup  (AXDescription = "<App>, <title>, <body>")
-//           ├─ AXStaticText <title>
-//           └─ AXStaticText <body>
+//      └─ AXGroup, subrole AXNotificationCenterBanner
+//           (AXDescription = "<App>, <title>, <subtitle>, <body>")
+//           └─ AXStaticText ×n, AXIdentifier "title" / "subtitle" / "body"
 //
 
 import AppKit
@@ -43,7 +43,8 @@ final class NotificationWatcher {
     private var pollTimer: DispatchSourceTimer?
     private let pollInterval: TimeInterval = 0.5
 
-    /// Recently emitted signatures with the time first seen, for de-duplication.
+    /// Signatures with the time last seen on screen. Refreshed every scan, so a
+    /// banner that lingers (Alert style) is never re-emitted while it's visible.
     private var seen: [String: Date] = [:]
     private let dedupWindow: TimeInterval = 12
     private var isStarted = false
@@ -119,8 +120,8 @@ final class NotificationWatcher {
     // MARK: - Reading
 
     /// Walk all banner windows, extract notifications, emit unseen ones. Safe to
-    /// call repeatedly (idempotent via de-dup). Invoked from the AX callback and poll.
-    func scanAndEmit() {
+    /// call repeatedly (idempotent via de-dup).
+    private func scanAndEmit() {
         guard let appElement else { return }
         pruneSeen()
 
@@ -128,14 +129,10 @@ final class NotificationWatcher {
         for window in windows {
             for group in notificationGroups(in: window) {
                 guard let observed = parseGroup(group) else { continue }
-                guard !observed.title.isEmpty || !observed.body.isEmpty else { continue }
 
-                let now = Date()
-                if let firstSeen = seen[observed.signature], now.timeIntervalSince(firstSeen) < dedupWindow {
-                    continue
-                }
-                seen[observed.signature] = now
-                onNotification?(observed)
+                let isNew = seen[observed.signature] == nil
+                seen[observed.signature] = Date()
+                if isNew { onNotification?(observed) }
             }
         }
     }

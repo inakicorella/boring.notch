@@ -84,6 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowScreenDidChangeObserver: Any?
     private var dragDetectors: [String: DragDetector] = [:] // UUID -> DragDetector
     private var observers: [Any] = []
+    private var agentsCancellable: AnyCancellable?
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -263,87 +264,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @MainActor
-    private func openAgentsPanel() {
-        guard Defaults[.enableAgentsNotch] else { return }
-
-        closeNotchTask?.cancel()
-        closeNotchTask = nil
-
+    /// The notch under the mouse when spanning displays, else the main notch.
+    private func viewModelUnderMouse() -> BoringViewModel {
+        guard Defaults[.showOnAllDisplays] else { return vm }
         let mouseLocation = NSEvent.mouseLocation
-        var viewModel = vm
-
-        if Defaults[.showOnAllDisplays] {
-            for screen in NSScreen.screens where screen.frame.contains(mouseLocation) {
-                if let uuid = screen.displayUUID, let screenViewModel = viewModels[uuid] {
-                    viewModel = screenViewModel
-                    break
-                }
-            }
-        }
-
-        _ = viewModel.open()
-        withAnimation(.smooth) {
-            coordinator.currentView = .agents
-        }
+        guard let uuid = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) })?.displayUUID else { return vm }
+        return viewModels[uuid] ?? vm
     }
 
     @MainActor
-    private func openNotificationsPanel() {
-        guard Defaults[.enableNotificationsNotch] else { return }
-
+    private func openPanel(_ view: NotchViews) {
         closeNotchTask?.cancel()
         closeNotchTask = nil
 
-        let mouseLocation = NSEvent.mouseLocation
-        var viewModel = vm
-
-        if Defaults[.showOnAllDisplays] {
-            for screen in NSScreen.screens where screen.frame.contains(mouseLocation) {
-                if let uuid = screen.displayUUID, let screenViewModel = viewModels[uuid] {
-                    viewModel = screenViewModel
-                    break
-                }
-            }
+        let viewModel = viewModelUnderMouse()
+        // Pick the tab before opening: an animated switch in the same update that
+        // inserts the tab bar leaves the previous tab highlighted.
+        withAnimation(viewModel.notchState == .open ? .smooth : nil) {
+            coordinator.currentView = view
         }
-
         _ = viewModel.open()
-        withAnimation(.smooth) {
-            coordinator.currentView = .notifications
-        }
     }
 
     @MainActor
     private func presentNotificationBanner() {
         guard Defaults[.enableNotificationsNotch], Defaults[.notificationBannerInNotch] else { return }
 
-        // Present on the notch under the mouse when spanning displays, else the main notch.
-        let mouseLocation = NSEvent.mouseLocation
-        var viewModel = vm
-        if Defaults[.showOnAllDisplays] {
-            for screen in NSScreen.screens where screen.frame.contains(mouseLocation) {
-                if let uuid = screen.displayUUID, let screenViewModel = viewModels[uuid] {
-                    viewModel = screenViewModel
-                    break
-                }
-            }
-        }
-
+        let viewModel = viewModelUnderMouse()
         _ = viewModel.open()
 
-        // Auto-close when the banner window elapses. A user hover cancels this task
-        // (see the hover/open handler), so interacting keeps the notch open. The
+        // Auto-close when the banner window elapses, unless the pointer is on the
+        // notch (the user is reading or using it; leaving closes it as usual). The
         // banner is cleared by the view model only *after* the notch has closed, so
         // the collapse animation never reveals the underlying tab (e.g. Now Playing).
         closeNotchTask?.cancel()
         let duration = max(2.0, Defaults[.notificationBannerDuration])
         closeNotchTask = Task { [weak viewModel] in
             try? await Task.sleep(for: .seconds(duration))
+            // Cancelled (e.g. the banner was tapped to open the panel): the sleep
+            // returns early, so without this the close would fire immediately.
+            guard !Task.isCancelled else { return }
             await MainActor.run {
-                withAnimation(.smooth) { viewModel?.close() }
+                guard let viewModel, !viewModel.isMouseHovering() else { return }
+                withAnimation(.smooth) { viewModel.close() }
             }
         }
     }
+
+    /// The panel auto-opens for a Claude request; once none are left (answered here,
+    /// in the terminal, or Claude hung up) close it, unless the user is on it.
+    @MainActor
+    private func closeIdleAgentsPanel() {
+        guard coordinator.currentView == .agents else { return }
+        for model in [vm] + Array(viewModels.values) where model.notchState == .open && !model.isMouseHovering() {
+            withAnimation(.smooth) { model.close() }
+        }
+    }
+
 
     private func createBoringNotchWindow(for screen: NSScreen, with viewModel: BoringViewModel) -> NSWindow {
         let rect = NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height)
@@ -452,7 +429,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forName: Notification.Name.openAgentsPanel, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.openAgentsPanel()
+                guard Defaults[.enableAgentsNotch] else { return }
+                self?.openPanel(.agents)
             }
         })
 
@@ -460,7 +438,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             forName: Notification.Name.openNotificationsPanel, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.openNotificationsPanel()
+                guard Defaults[.enableNotificationsNotch] else { return }
+                self?.openPanel(.notifications)
             }
         })
 
@@ -488,6 +467,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.onScreenUnlocked(notification)
                 }
         }
+
+        agentsCancellable = AgentsStateViewModel.shared.$pendingPrompts
+            .map(\.isEmpty)
+            .removeDuplicates()
+            .dropFirst()
+            .filter { $0 }
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.closeIdleAgentsPanel() }
+            }
 
         KeyboardShortcuts.onKeyDown(for: .toggleSneakPeek) { [weak self] in
             guard let self = self else { return }

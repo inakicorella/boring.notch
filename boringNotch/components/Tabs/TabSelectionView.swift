@@ -9,7 +9,8 @@ import Defaults
 import SwiftUI
 
 struct TabModel: Identifiable {
-    let id = UUID()
+    // Stable identity: visibleTabs is rebuilt on every render.
+    var id: NotchViews { view }
     let label: String
     let icon: String
     let view: NotchViews
