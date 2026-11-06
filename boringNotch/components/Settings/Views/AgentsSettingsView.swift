@@ -17,15 +17,9 @@ struct AgentsSettings: View {
     var body: some View {
         Form {
             Section {
+                // Starting/stopping the bridge is handled by BoringViewCoordinator.
                 Defaults.Toggle(key: .enableAgentsNotch) {
                     Text("Enable Agents tab")
-                }
-                .onChange(of: enableAgentsNotch) { _, enabled in
-                    if enabled {
-                        agents.startBridgeIfNeeded()
-                    } else {
-                        agents.stopBridge()
-                    }
                 }
 
                 Defaults.Toggle(key: .autoOpenAgentsOnPrompt) {
@@ -61,13 +55,15 @@ struct AgentsSettings: View {
                 }
 
                 Button("Install Claude & Cursor hooks") {
-                    do {
-                        try agents.installHooks()
-                        installDidFail = false
-                        installMessage = "Hooks installed. Restart Claude Code / Cursor agent sessions to pick them up."
-                    } catch {
-                        installDidFail = true
-                        installMessage = error.localizedDescription
+                    Task {
+                        do {
+                            try await agents.installHooks()
+                            installDidFail = false
+                            installMessage = "Hooks installed. Restart Claude Code / Cursor agent sessions to pick them up."
+                        } catch {
+                            installDidFail = true
+                            installMessage = error.localizedDescription
+                        }
                     }
                 }
                 .disabled(!enableAgentsNotch)

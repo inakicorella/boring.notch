@@ -109,4 +109,6 @@ final class BNLunarBrightnessEvent: NSObject, NSSecureCoding {
     // System notification mirroring (performed by the helper via Accessibility)
     func startNotificationStream(with reply: @escaping (Bool) -> Void)
     func stopNotificationStream()
+    /// Install the Claude Code / Cursor agent hooks. Replies nil on success, else an error message.
+    func installAgentHooks(port: Int, with reply: @escaping (String?) -> Void)
 }

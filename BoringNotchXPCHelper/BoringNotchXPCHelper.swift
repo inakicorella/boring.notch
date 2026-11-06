@@ -432,6 +432,17 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
         }
     }
 
+    // MARK: - Agent hooks
+
+    @objc func installAgentHooks(port: Int, with reply: @escaping (String?) -> Void) {
+        do {
+            try AgentHooksInstaller.install(port: port)
+            reply(nil)
+        } catch {
+            reply(error.localizedDescription)
+        }
+    }
+
     // MARK: - Lunar OSD preference (hideOSD)
 
     private static let lunarBundleID = "fyi.lunar.Lunar"

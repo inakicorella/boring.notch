@@ -24,13 +24,3 @@ struct CursorEditEvent: Identifiable, Equatable, Codable {
         URL(fileURLWithPath: filePath).deletingLastPathComponent().path
     }
 }
-
-struct CursorEditPayload: Codable {
-    let filePath: String?
-    let path: String?
-    let file_path: String?
-
-    var resolvedPath: String? {
-        filePath ?? path ?? file_path
-    }
-}

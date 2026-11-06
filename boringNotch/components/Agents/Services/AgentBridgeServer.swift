@@ -40,7 +40,10 @@ final class AgentBridgeServer: @unchecked Sendable {
             do {
                 let parameters = NWParameters.tcp
                 parameters.allowLocalEndpointReuse = true
-                let listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: port)!)
+                // Bind to 127.0.0.1 only; `NWListener(using:on:)` listens on every
+                // interface, letting anyone on the LAN push fake approval prompts.
+                parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port)!)
+                let listener = try NWListener(using: parameters)
                 listener.newConnectionHandler = { [weak self] connection in
                     self?.handle(connection: connection)
                 }

@@ -372,6 +372,22 @@ final class XPCHelperClient: NSObject {
         }
     }
 
+    /// nil on success, else a message to show the user.
+    nonisolated func installAgentHooks(port: Int) async -> String? {
+        do {
+            let service = await MainActor.run {
+                ensureRemoteService()
+            }
+            return try await service.withContinuation { service, continuation in
+                service.installAgentHooks(port: port) { message in
+                    continuation.resume(returning: message)
+                }
+            }
+        } catch {
+            return "Couldn't reach the Boring Notch helper: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - System Notification Stream
 
     private func makeNotificationListenerInterface() -> NSXPCInterface {

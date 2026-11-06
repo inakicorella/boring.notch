@@ -20,7 +20,6 @@ final class AgentsStateViewModel: ObservableObject {
 
     var pendingPromptCount: Int { pendingPrompts.count }
     var hasPendingPrompts: Bool { !pendingPrompts.isEmpty }
-    var hasActivity: Bool { hasPendingPrompts || !cursorEdits.isEmpty }
 
     private init() {
         AgentBridgeServer.shared.onRunningStateChange = { [weak self] running in
@@ -60,7 +59,7 @@ final class AgentsStateViewModel: ObservableObject {
         let promptID = UUID()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<AgentDecision, Never>) in
-                let prompt = PendingClaudePrompt(id: promptID, payload: payload, rawBody: rawBody, continuation: continuation)
+                let prompt = PendingClaudePrompt(id: promptID, payload: payload, continuation: continuation)
                 pendingPrompts.insert(prompt, at: 0)
 
                 if Defaults[.autoOpenAgentsOnPrompt] {
@@ -94,18 +93,9 @@ final class AgentsStateViewModel: ObservableObject {
     }
 
     func recordCursorEdit(rawBody: Data) {
-        let path: String
-        if let payload = try? JSONDecoder().decode(CursorEditPayload.self, from: rawBody),
-           let resolved = payload.resolvedPath {
-            path = resolved
-        } else if let object = try? JSONSerialization.jsonObject(with: rawBody) as? [String: Any],
-                  let resolved = (object["file_path"] as? String)
-                    ?? (object["filePath"] as? String)
-                    ?? (object["path"] as? String) {
-            path = resolved
-        } else {
-            return
-        }
+        guard let object = try? JSONSerialization.jsonObject(with: rawBody) as? [String: Any],
+              let path = (object["file_path"] as? String) ?? (object["filePath"] as? String) ?? (object["path"] as? String)
+        else { return }
 
         cursorEdits.removeAll { $0.filePath == path }
         cursorEdits.insert(CursorEditEvent(filePath: path), at: 0)
@@ -149,124 +139,12 @@ final class AgentsStateViewModel: ObservableObject {
 
     // MARK: - Hook installation
 
-    var hooksInstallDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".boring-notch", isDirectory: true)
-            .appendingPathComponent("hooks", isDirectory: true)
-    }
-
-    func installHooks() throws {
-        let fm = FileManager.default
-        try fm.createDirectory(at: hooksInstallDirectory, withIntermediateDirectories: true)
-
-        let claudeScript = hooksInstallDirectory.appendingPathComponent("claude-permission.sh")
-        let cursorScript = hooksInstallDirectory.appendingPathComponent("cursor-after-edit.sh")
+    /// Done by the non-sandboxed helper: from inside the sandbox, "home" is the app
+    /// container, so ~/.claude and ~/.cursor would be unreachable.
+    func installHooks() async throws {
         let port = Defaults[.agentsBridgePort]
-
-        try claudePermissionScript(port: port).write(to: claudeScript, atomically: true, encoding: .utf8)
-        try cursorAfterEditScript(port: port).write(to: cursorScript, atomically: true, encoding: .utf8)
-        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claudeScript.path)
-        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cursorScript.path)
-
-        try mergeClaudeSettings(scriptPath: claudeScript.path)
-        try mergeCursorHooks(scriptPath: cursorScript.path)
-    }
-
-    private func claudePermissionScript(port: Int) -> String {
-        """
-        #!/bin/bash
-        # Boring Notch ↔ Claude Code PermissionRequest bridge
-        set -euo pipefail
-        INPUT="$(cat)"
-        RESPONSE="$(curl -sS -X POST "http://127.0.0.1:\(port)/claude/permission" \
-          -H "Content-Type: application/json" \
-          --data-binary "$INPUT" \
-          --max-time 300 || true)"
-        if [ -z "$RESPONSE" ]; then
-          printf '%s' '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Boring Notch bridge unavailable"}}}'
-          exit 0
-        fi
-        printf '%s' "$RESPONSE"
-        exit 0
-        """
-    }
-
-    private func cursorAfterEditScript(port: Int) -> String {
-        """
-        #!/bin/bash
-        # Boring Notch ↔ Cursor afterFileEdit bridge (notify only)
-        set -euo pipefail
-        INPUT="$(cat)"
-        curl -sS -X POST "http://127.0.0.1:\(port)/cursor/edit" \
-          -H "Content-Type: application/json" \
-          --data-binary "$INPUT" \
-          --max-time 2 >/dev/null 2>&1 || true
-        exit 0
-        """
-    }
-
-    private func mergeClaudeSettings(scriptPath: String) throws {
-        let settingsURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/settings.json")
-        try FileManager.default.createDirectory(
-            at: settingsURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-
-        var root: [String: Any] = [:]
-        if let data = try? Data(contentsOf: settingsURL),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            root = json
+        if let message = await XPCHelperClient.shared.installAgentHooks(port: port) {
+            throw NSError(domain: "AgentHooks", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
         }
-
-        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
-        let entry: [String: Any] = [
-            "hooks": [
-                [
-                    "type": "command",
-                    "command": scriptPath
-                ]
-            ]
-        ]
-        hooks["PermissionRequest"] = [entry]
-        root["hooks"] = hooks
-
-        let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: settingsURL, options: .atomic)
-    }
-
-    private func mergeCursorHooks(scriptPath: String) throws {
-        let hooksURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cursor/hooks.json")
-        try FileManager.default.createDirectory(
-            at: hooksURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-
-        var root: [String: Any] = ["version": 1]
-        if let data = try? Data(contentsOf: hooksURL),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            root = json
-            if root["version"] == nil {
-                root["version"] = 1
-            }
-        }
-
-        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
-        var afterFileEdit = (hooks["afterFileEdit"] as? [[String: Any]]) ?? []
-        afterFileEdit.removeAll { entry in
-            if let command = entry["command"] as? String {
-                return command.contains("boring-notch") || command.contains("cursor-after-edit")
-            }
-            return false
-        }
-        afterFileEdit.append([
-            "command": scriptPath
-        ])
-        hooks["afterFileEdit"] = afterFileEdit
-        root["hooks"] = hooks
-
-        let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: hooksURL, options: .atomic)
     }
 }

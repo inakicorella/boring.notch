@@ -104,7 +104,6 @@ enum AnyCodableValue: Codable {
 final class PendingClaudePrompt: Identifiable, ObservableObject {
     let id: UUID
     let payload: ClaudePermissionPayload
-    let rawBody: Data
     let createdAt: Date
     private let continuation: CheckedContinuation<AgentDecision, Never>
     private(set) var isResolved = false
@@ -112,12 +111,10 @@ final class PendingClaudePrompt: Identifiable, ObservableObject {
     init(
         id: UUID = UUID(),
         payload: ClaudePermissionPayload,
-        rawBody: Data,
         continuation: CheckedContinuation<AgentDecision, Never>
     ) {
         self.id = id
         self.payload = payload
-        self.rawBody = rawBody
         self.createdAt = Date()
         self.continuation = continuation
     }
